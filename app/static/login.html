@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>登入 — 馬達即時診斷系統</title>
+<link rel="stylesheet" href="/static/style.css?v=6">
+</head>
+<body class="login-body">
+<div class="login-card">
+  <h1>⚙️ 馬達即時診斷系統</h1>
+  <p class="login-sub">請登入以繼續</p>
+  <form id="login-form">
+    <label>帳號</label>
+    <input type="text" id="username" autocomplete="username" required autofocus>
+    <label>密碼</label>
+    <input type="password" id="password" autocomplete="current-password" required>
+    <button type="submit" class="btn btn-primary" id="login-btn">登入</button>
+    <p id="login-error" class="login-error" hidden></p>
+  </form>
+</div>
+<script>
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById("login-btn");
+  const err = document.getElementById("login-error");
+  btn.disabled = true; err.hidden = true;
+  try {
+    const res = await fetch("/api/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        username: document.getElementById("username").value.trim(),
+        password: document.getElementById("password").value,
+      }),
+    });
+    if (res.ok) { location.href = "/"; return; }
+    const data = await res.json().catch(() => ({}));
+    err.textContent = data.detail || "登入失敗";
+    err.hidden = false;
+  } catch {
+    err.textContent = "無法連線到伺服器";
+    err.hidden = false;
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

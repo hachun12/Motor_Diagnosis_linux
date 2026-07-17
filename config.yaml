@@ -1,0 +1,53 @@
+# ─── 馬達診斷系統設定檔 ─────────────────────────────────────────
+# 換 DAQ 硬體時：改 datasource.driver 並調整 channels 校正值即可，
+# 核心程式不需修改。
+
+server:
+  host: 0.0.0.0
+  port: 8000
+
+datasource:
+  driver: simulator          # simulator | nidaq | replay
+  sample_rate: 5000          # Hz（每通道）
+  batch_size: 50             # 每次讀取樣本數
+  nidaq:
+    channels: "Dev1/ai0:5"   # NI-DAQmx 通道字串（僅 x86_64 可用）
+  replay:
+    file: ""                 # saved_data/ 內的 CSV 檔名（driver=replay 時必填）
+    loop: true
+
+# 通道校正：value = (raw + offset) * gain
+# 僅套用於輸出「未校正原始電壓」的驅動（如 nidaq）；
+# simulator / replay 直接輸出工程單位，不再套用。
+channels:
+  - {key: A, group: current,   offset:  0.40, gain: 10.0}
+  - {key: B, group: current,   offset:  0.69, gain: 10.0}
+  - {key: C, group: current,   offset:  0.10, gain: 10.0}
+  - {key: X, group: vibration, offset: -1.20, gain: 1.0}
+  - {key: Y, group: vibration, offset: -1.26, gain: 1.0}
+  - {key: Z, group: vibration, offset: -1.53, gain: 1.0}
+
+history_seconds: 60          # 歷史緩衝長度（存檔範圍）
+display_points: 200          # 即時波形顯示點數
+
+model:
+  path: best_motor_cnn_weights.pth
+  window: 2048               # 推論視窗（樣本數）
+  interval_seconds: 1.0      # 推論週期
+  classes: [N, RB, RB2, RBS, RBS1, RBS2, RU, RUB, RUB2, RUBS, RUBS1, RUBS2]
+  normal_classes: [N]        # 視為正常的類別
+
+iso10816:                    # 振動 RMS 分區門檻 (g)
+  zone_a: 0.28
+  zone_b: 0.45
+  zone_c: 0.71
+
+spectrum:
+  nfft: 4096                 # FFT 點數
+  interval_seconds: 0.5      # 頻譜推播週期
+  max_bins: 512              # 傳輸頻譜解析度（峰值保留降採樣）
+
+auth:
+  session_hours: 12
+  max_failed_attempts: 5     # 登入失敗鎖定門檻
+  lockout_seconds: 60

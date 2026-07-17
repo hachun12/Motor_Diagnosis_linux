@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>馬達即時診斷系統</title>
+<link rel="stylesheet" href="/static/vendor/uPlot.min.css?v=6">
+<link rel="stylesheet" href="/static/style.css?v=6">
+</head>
+<body>
+
+<header>
+  <h1>⚙️ 馬達即時診斷系統</h1>
+  <nav class="tabs">
+    <button class="tab-btn active" data-view="live">📊 即時監控</button>
+    <button class="tab-btn" data-view="history">🗂️ 歷史記錄</button>
+  </nav>
+  <div class="spacer"></div>
+  <span class="status-pill" id="status-pill">待機</span>
+  <div class="userbox">
+    <span id="user-name">…</span>
+    <button class="btn btn-sm btn-gray" id="btn-pwd">改密碼</button>
+    <button class="btn btn-sm btn-gray" id="btn-users" hidden>使用者管理</button>
+    <button class="btn btn-sm btn-gray" id="btn-logout">登出</button>
+  </div>
+</header>
+
+<!-- ═══ 即時監控 ═══ -->
+<main id="view-live" class="active">
+  <div class="charts-col">
+    <div class="card">
+      <h3>⚡ 電流 (A / B / C) <span class="hint">拖曳框選放大，雙擊還原</span></h3>
+      <div class="chart-row">
+        <div class="chart-wrap" id="chart-cur"></div>
+        <div class="chart-checks" id="checks-cur"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>📳 震動 (X / Y / Z)</h3>
+      <div class="chart-row">
+        <div class="chart-wrap" id="chart-vib"></div>
+        <div class="chart-checks" id="checks-vib"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>📈 FFT 頻譜 <span class="hint">Hanning 窗、峰值保留｜拖曳放大，雙擊還原</span></h3>
+      <div class="spec-controls" id="spec-controls">
+        <label><input type="checkbox" id="spec-db"> dB 刻度</label>
+      </div>
+      <div class="chart-wrap tall" id="chart-spec"></div>
+    </div>
+  </div>
+
+  <aside>
+    <div class="card">
+      <h3>🎛️ 控制面板</h3>
+      <div class="btn-row">
+        <button class="btn btn-start" id="btn-start">▶ 啟動</button>
+        <button class="btn btn-stop" id="btn-stop" disabled>⏹ 停止</button>
+      </div>
+      <p class="muted" style="margin:8px 0 0; font-size:12px;" id="driver-info"></p>
+    </div>
+
+    <div class="card">
+      <h3>🔍 馬達狀態</h3>
+      <div class="status-box">
+        <span id="iso-dot">●</span>
+        <span id="iso-text">待機</span>
+        <span id="iso-rms">RMS: ---</span>
+      </div>
+      <div class="status-box">
+        <span class="ai-label">模型結果</span>
+        <span id="ai-result">等待資料...</span>
+      </div>
+    </div>
+
+    <div class="card" id="save-card">
+      <h3>💾 存檔</h3>
+      <div class="save-row">
+        <input type="text" id="label-input" placeholder="輸入標籤名稱...">
+        <button class="btn btn-primary btn-sm" id="btn-save" style="font-weight:bold;">存檔</button>
+      </div>
+      <select id="label-select"><option value="">-- 選擇已有標籤 --</option></select>
+    </div>
+
+    <div class="card">
+      <div class="log-head">
+        <h3>🖥️ 系統狀態</h3>
+        <button class="btn btn-sm btn-gray" id="btn-clear-log">清除</button>
+      </div>
+      <div id="log-terminal"></div>
+    </div>
+  </aside>
+</main>
+
+<!-- ═══ 歷史記錄 ═══ -->
+<main id="view-history">
+  <div>
+    <div class="card">
+      <h3>🗂️ 已儲存記錄 <button class="btn btn-sm btn-gray" id="btn-refresh-rec" style="float:right;">重新整理</button></h3>
+      <table id="rec-table">
+        <thead><tr><th>檔名</th><th>大小</th><th>時間</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="muted" id="rec-empty" hidden>尚無記錄</p>
+    </div>
+  </div>
+  <div>
+    <div class="card" id="play-card" hidden>
+      <h3>▶️ 回放：<span id="play-name" class="muted"></span> <span class="hint">拖曳框選放大，雙擊還原</span></h3>
+      <div class="play-controls">
+        <input type="range" id="play-slider" min="0" max="0" step="0.1" value="0">
+        <select id="play-window">
+          <option value="1">視窗 1 秒</option>
+          <option value="2" selected>視窗 2 秒</option>
+          <option value="5">視窗 5 秒</option>
+        </select>
+        <span class="play-pos" id="play-pos"></span>
+      </div>
+      <div class="status-box">
+        <span class="ai-label">模型判斷（本視窗末 2048 點）</span>
+        <span id="play-ai" style="font-weight:bold;">—</span>
+      </div>
+      <h3 style="margin-top:4px;">⚡ 電流</h3>
+      <div class="chart-wrap" id="chart-play-cur"></div>
+      <h3>📳 震動</h3>
+      <div class="chart-wrap" id="chart-play-vib"></div>
+      <h3>📈 頻譜（本視窗）
+        <label style="font-weight:normal;font-size:12px;"><input type="checkbox" id="play-spec-db"> dB</label>
+      </h3>
+      <div class="spec-controls" id="play-spec-controls"></div>
+      <div class="chart-wrap tall" id="chart-play-spec"></div>
+    </div>
+    <div class="card" id="play-placeholder">
+      <p class="muted">從左側選擇一筆記錄按「回放」，即可瀏覽波形與頻譜。</p>
+    </div>
+  </div>
+</main>
+
+<!-- ═══ 對話框 ═══ -->
+<dialog id="dlg-pwd">
+  <h3>修改密碼</h3>
+  <form method="dialog" id="pwd-form">
+    <label>舊密碼</label><input type="password" id="pwd-old" autocomplete="current-password">
+    <label>新密碼（至少 6 碼）</label><input type="password" id="pwd-new" autocomplete="new-password">
+    <p class="dialog-error" id="pwd-error" hidden></p>
+    <div class="btn-row">
+      <button class="btn btn-gray" value="cancel">取消</button>
+      <button class="btn btn-primary" id="pwd-submit" value="default">確定</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="dlg-users">
+  <h3>使用者管理</h3>
+  <table id="users-table">
+    <thead><tr><th>帳號</th><th>角色</th><th></th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <form id="user-add-form">
+    <label>新增帳號</label><input type="text" id="new-user" autocomplete="off">
+    <label>密碼（至少 6 碼）</label><input type="password" id="new-pass" autocomplete="new-password">
+    <label>角色</label>
+    <select id="new-role">
+      <option value="viewer">viewer（僅觀看）</option>
+      <option value="admin">admin（管理員）</option>
+    </select>
+    <p class="dialog-error" id="users-error" hidden></p>
+    <div class="btn-row">
+      <button type="button" class="btn btn-gray" id="users-close">關閉</button>
+      <button type="submit" class="btn btn-primary">新增</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/static/vendor/uPlot.iife.min.js?v=6"></script>
+<script src="/static/app.js?v=6"></script>
+</body>
+</html>

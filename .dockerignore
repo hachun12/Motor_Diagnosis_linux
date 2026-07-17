@@ -1,0 +1,15 @@
+.venv
+__pycache__
+**/__pycache__
+build
+dist
+*.spec
+saved_data
+state
+users.yaml
+.session_secret
+debug_*.txt
+Diagnosis_System_v4.py
+requirements.txt
+setup_ubuntu.sh
+README.md

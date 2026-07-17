@@ -1,0 +1,10 @@
+# WebUI 版相依套件（桌面版仍用 requirements.txt）
+fastapi>=0.111,<1
+uvicorn[standard]>=0.30
+numpy>=1.26
+torch>=2.3
+pyyaml>=6.0
+bcrypt>=4.1
+itsdangerous>=2.2
+# nidaqmx 為選配：僅 x86_64 且已裝 NI-DAQmx 驅動的主機需要
+# nidaqmx>=1.0

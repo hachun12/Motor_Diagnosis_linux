@@ -1,0 +1,21 @@
+services:
+  motor-diagnosis:
+    build: .
+    image: motor-diagnosis:latest
+    container_name: motor-diagnosis
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Taipei
+      - DATA_SOURCE=${DATA_SOURCE:-simulator}   # simulator | nidaq | replay
+      # 首次啟動的管理員密碼（未設定則產生隨機密碼並寫入容器日誌）
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      # 執行期狀態統一放 /app/state（volume 持久化）
+      - LABELS_FILE=/app/state/saved_labels.json
+      - USERS_FILE=/app/state/users.yaml
+      - SECRET_FILE=/app/state/.session_secret
+    volumes:
+      - ./saved_data:/app/saved_data
+      - ./state:/app/state
+      - ./config.yaml:/app/config.yaml:ro
+    restart: unless-stopped

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>馬達即時診斷系統 — 部署交接文件</title>
+<style>
+  :root {
+    --ink: #1f2937; --muted: #6b7280; --line: #e5e7eb;
+    --accent: #1d4ed8; --bg-code: #f3f4f6; --warn-bg: #fef3c7; --warn-line: #f59e0b;
+    --ok-bg: #ecfdf5; --ok-line: #10b981; --danger-bg: #fef2f2; --danger-line: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
+    color: var(--ink); margin: 0; line-height: 1.75; font-size: 15px;
+    background: #fff;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; padding: 40px 28px 80px; }
+  h1 { font-size: 26px; border-bottom: 3px solid var(--accent); padding-bottom: 10px; }
+  h1 small { display: block; font-size: 13px; color: var(--muted); font-weight: normal; margin-top: 6px; }
+  h2 { font-size: 20px; margin-top: 44px; padding-left: 10px; border-left: 4px solid var(--accent); }
+  h3 { font-size: 16px; margin-top: 28px; }
+  code { background: var(--bg-code); padding: 1px 6px; border-radius: 4px; font-size: 13px;
+         font-family: Consolas, "DejaVu Sans Mono", monospace; }
+  pre { background: #111827; color: #e5e7eb; padding: 14px 16px; border-radius: 8px;
+        overflow-x: auto; font-size: 13px; line-height: 1.6; }
+  pre code { background: none; color: inherit; padding: 0; }
+  pre .c { color: #9ca3af; }  /* 註解 */
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 8px 12px; text-align: left; vertical-align: top; }
+  th { background: #f9fafb; }
+  .note, .warn, .danger {
+    border-radius: 8px; padding: 12px 16px; margin: 16px 0; border-left: 4px solid;
+  }
+  .note   { background: var(--ok-bg);     border-color: var(--ok-line); }
+  .warn   { background: var(--warn-bg);   border-color: var(--warn-line); }
+  .danger { background: var(--danger-bg); border-color: var(--danger-line); }
+  .toc { background: #f9fafb; border: 1px solid var(--line); border-radius: 8px; padding: 16px 24px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc ol { margin: 6px 0; }
+  .muted { color: var(--muted); }
+  @media print {
+    body { font-size: 12px; }
+    pre { white-space: pre-wrap; }
+    h2 { page-break-after: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>⚙️ 馬達即時診斷系統 — 部署交接文件
+  <small>版本：2026-07-17｜適用：WebUI（Docker）版｜對象：部署與維運人員</small>
+</h1>
+
+<div class="toc">
+<strong>目錄</strong>
+<ol>
+  <li><a href="#overview">系統概述</a></li>
+  <li><a href="#matrix">平台支援矩陣</a></li>
+  <li><a href="#prereq">部署前準備</a></li>
+  <li><a href="#deploy-x64">部署方式 A：x86_64 主機（Docker）</a></li>
+  <li><a href="#deploy-arm">部署方式 B：ARM64 主機（Docker）</a></li>
+  <li><a href="#deploy-ni">部署方式 C：x86_64 + NI DAQ 硬體（不經 Docker）</a></li>
+  <li><a href="#config">設定說明</a></li>
+  <li><a href="#firstrun">首次啟動與帳號管理</a></li>
+  <li><a href="#ops">日常維運</a></li>
+  <li><a href="#trouble">疑難排解</a></li>
+</ol>
+</div>
+
+<h2 id="overview">1. 系統概述</h2>
+<p>本系統透過 DAQ 擷取馬達的 3 相電流與 3 軸振動訊號（6 通道、5&nbsp;kHz），
+以 CNN 模型即時分類故障，並依 ISO&nbsp;10816 振動 RMS 分區判斷。
+操作介面為瀏覽器 WebUI（登入制，區分 admin / viewer 角色），
+支援即時波形、FFT 頻譜、標註存檔、歷史記錄下載與回放（回放亦可跑模型判斷）。</p>
+
+<table>
+  <tr><th>項目</th><th>內容</th></tr>
+  <tr><td>服務埠</td><td><code>8000</code>（HTTP，可於 docker-compose.yml 修改對外埠）</td></tr>
+  <tr><td>資料持久化</td><td><code>./saved_data/</code>（記錄 CSV）、<code>./state/</code>（帳號、標籤、session 金鑰）</td></tr>
+  <tr><td>資料源模式</td><td><code>simulator</code>（模擬）｜<code>nidaq</code>（NI 硬體，僅 x86_64）｜<code>replay</code>（CSV 重播）</td></tr>
+  <tr><td>映像大小</td><td>約 1.5&nbsp;GB（含 PyTorch CPU 版）</td></tr>
+</table>
+
+<h2 id="matrix">2. 平台支援矩陣</h2>
+<table>
+  <tr><th>目標平台</th><th>Docker 部署</th><th>可用資料源</th><th>備註</th></tr>
+  <tr>
+    <td>x86_64（Ubuntu 20.04+ 等）</td><td>✅</td>
+    <td>simulator、replay、nidaq*</td>
+    <td>*nidaq 建議改用「部署方式 C」直接跑主機</td>
+  </tr>
+  <tr>
+    <td>ARM64（Ubuntu 24.04 等）</td><td>✅</td>
+    <td>simulator、replay</td>
+    <td>NI-DAQmx 無 ARM64 Linux 驅動；需搭配 ARM 相容 DAQ 硬體（driver 另行開發）</td>
+  </tr>
+</table>
+<div class="danger"><strong>重要限制：</strong>NI-DAQmx for Linux 僅支援 x86_64。
+ARM64 主機<strong>無法</strong>連接 NI 硬體（與 Docker 無關，是官方驅動限制）。
+ARM64 現場如需實際量測，須採用具備 aarch64 Linux 函式庫的 DAQ 硬體
+（如 LabJack T7/T8、MCC DAQ HAT），並請開發人員新增對應驅動模組。</div>
+
+<h2 id="prereq">3. 部署前準備</h2>
+<ul>
+  <li>目標主機已安裝 <strong>Docker Engine 與 docker compose</strong>（<code>docker --version</code> 確認）。</li>
+  <li>取得完整專案資料夾（含 <code>Dockerfile</code>、<code>docker-compose.yml</code>、<code>config.yaml</code>、
+      <code>app/</code>、<code>best_motor_cnn_weights.pth</code>、<code>requirements-web.txt</code>）。</li>
+  <li>確認防火牆放行服務埠（預設 8000）。</li>
+  <li>首次建置需可連外網（下載基底映像與 Python 套件）；若目標機無外網，改用
+      <a href="#deploy-arm">§5</a> 的「映像搬運」方式。</li>
+</ul>
+
+<h2 id="deploy-x64">4. 部署方式 A：x86_64 主機（Docker）</h2>
+<p>最單純的情境：在目標機上直接建置並啟動。</p>
+<pre><code>cd &lt;專案資料夾&gt;
+ADMIN_PASSWORD=請設定管理員密碼 docker compose up -d --build
+<span class="c"># 完成後瀏覽 http://&lt;主機IP&gt;:8000，帳號 admin</span></code></pre>
+<p>預設資料源為 <code>simulator</code>（模擬訊號），適合驗收與教育訓練。</p>
+
+<h2 id="deploy-arm">5. 部署方式 B：ARM64 主機（Docker）</h2>
+
+<h3>方式 B-1：ARM64 主機可連外網（最簡單）</h3>
+<p>指令與方式 A 完全相同——Dockerfile 為 multi-arch，在 ARM64 上會自動抓 aarch64 版套件：</p>
+<pre><code>cd &lt;專案資料夾&gt;
+ADMIN_PASSWORD=請設定管理員密碼 docker compose up -d --build</code></pre>
+
+<h3>方式 B-2：由 x86_64 開發機交叉建置後搬運（目標機無外網）</h3>
+<p><strong>在 x86_64 開發機上</strong>（一次性環境準備 + 建置匯出）：</p>
+<pre><code><span class="c"># 一次性：安裝 ARM64 模擬與 builder</span>
+docker run --privileged --rm tonistiigi/binfmt --install arm64
+docker buildx create --name multiarch --use
+
+<span class="c"># 建置 ARM64 映像並打包</span>
+cd &lt;專案資料夾&gt;
+docker buildx build --platform linux/arm64 -t motor-diagnosis:arm64 --load .
+docker save motor-diagnosis:arm64 | gzip &gt; motor-diagnosis-arm64.tar.gz</code></pre>
+<p><strong>在 ARM64 目標機上</strong>（把壓縮檔與專案資料夾一起複製過去）：</p>
+<pre><code>docker load &lt; motor-diagnosis-arm64.tar.gz
+docker tag motor-diagnosis:arm64 motor-diagnosis:latest
+cd &lt;專案資料夾&gt;
+ADMIN_PASSWORD=請設定管理員密碼 docker compose up -d
+<span class="c"># 注意：不要加 --build（直接使用載入的映像）</span></code></pre>
+<div class="note">專案資料夾在目標機上仍是必要的——<code>docker-compose.yml</code>、
+<code>config.yaml</code> 與資料目錄（<code>saved_data/</code>、<code>state/</code>）都掛載自該資料夾。</div>
+
+<h2 id="deploy-ni">6. 部署方式 C：x86_64 + NI DAQ 硬體（不經 Docker）</h2>
+<p>NI 驅動需存取主機核心模組，放進容器過於複雜，此情境建議直接在主機執行：</p>
+<pre><code><span class="c"># 1. 先依 NI 官方步驟安裝 NI-DAQmx for Linux（確認支援矩陣涵蓋你的 OS/核心版本）</span>
+<span class="c"># 2. 建立 Python 環境並啟動</span>
+cd &lt;專案資料夾&gt;
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-web.txt
+pip install nidaqmx
+
+<span class="c"># 3. 設定資料源並啟動服務</span>
+DATA_SOURCE=nidaq ADMIN_PASSWORD=請設定管理員密碼 python -m app.main</code></pre>
+<p>裝置名稱預設 <code>Dev1</code>（通道 <code>Dev1/ai0:5</code>），不同時修改
+<code>config.yaml</code> 的 <code>datasource.nidaq.channels</code>。
+如需開機自動啟動，可另配 systemd unit（請洽開發人員）。</p>
+
+<h2 id="config">7. 設定說明</h2>
+
+<h3>環境變數（docker-compose.yml 或啟動時帶入）</h3>
+<table>
+  <tr><th>變數</th><th>用途</th><th>預設</th></tr>
+  <tr><td><code>ADMIN_PASSWORD</code></td><td>首次啟動建立 admin 帳號的密碼（僅 <code>state/users.yaml</code> 不存在時生效）</td><td>未設定則產生隨機密碼寫入容器日誌</td></tr>
+  <tr><td><code>DATA_SOURCE</code></td><td>資料源：<code>simulator</code> / <code>nidaq</code> / <code>replay</code>（優先於 config.yaml）</td><td><code>simulator</code></td></tr>
+  <tr><td><code>TZ</code></td><td>時區（影響記錄時間戳）</td><td><code>Asia/Taipei</code></td></tr>
+</table>
+
+<h3>config.yaml 重點欄位</h3>
+<table>
+  <tr><th>欄位</th><th>說明</th></tr>
+  <tr><td><code>datasource.driver / sample_rate</code></td><td>資料源與取樣率（預設 5000&nbsp;Hz）</td></tr>
+  <tr><td><code>channels</code></td><td>6 通道的校正值：<code>value = (raw + offset) × gain</code>。<strong>更換 DAQ 硬體或重新校驗時改這裡</strong>，僅套用於輸出原始電壓的驅動（nidaq）</td></tr>
+  <tr><td><code>model.classes</code></td><td>模型輸出類別（順序不可變動）</td></tr>
+  <tr><td><code>iso10816</code></td><td>振動 RMS 分區門檻（Zone A/B/C）</td></tr>
+</table>
+<div class="warn">修改 <code>config.yaml</code> 後需重啟服務生效：<code>docker compose restart</code></div>
+
+<h2 id="firstrun">8. 首次啟動與帳號管理</h2>
+<ol>
+  <li>瀏覽 <code>http://&lt;主機IP&gt;:8000</code>，以 <code>admin</code> 與部署時設定的密碼登入。</li>
+  <li>登入後點右上「<strong>改密碼</strong>」更換為正式密碼。</li>
+  <li>點「<strong>使用者管理</strong>」建立其他帳號：
+    <ul>
+      <li><code>admin</code>：可啟動/停止、存檔、管理標籤與使用者</li>
+      <li><code>viewer</code>：僅能觀看波形、狀態與歷史記錄（現場看板、一般人員用）</li>
+    </ul>
+  </li>
+</ol>
+<div class="note">帳號資料存於 <code>state/users.yaml</code>（bcrypt 雜湊，非明文）。
+session 有效 12 小時，逾期需重新登入。</div>
+
+<h2 id="ops">9. 日常維運</h2>
+<table>
+  <tr><th>操作</th><th>指令（於專案資料夾執行）</th></tr>
+  <tr><td>查看服務狀態</td><td><code>docker compose ps</code></td></tr>
+  <tr><td>查看日誌</td><td><code>docker logs -f motor-diagnosis</code></td></tr>
+  <tr><td>重啟 / 停止</td><td><code>docker compose restart</code>｜<code>docker compose down</code></td></tr>
+  <tr><td>更新版本</td><td>覆蓋新版專案檔後 <code>docker compose up -d --build</code>（資料目錄不受影響）</td></tr>
+  <tr><td>備份</td><td>打包 <code>saved_data/</code> 與 <code>state/</code> 兩個資料夾即可完整還原資料與帳號</td></tr>
+</table>
+<ul>
+  <li>服務設定 <code>restart: unless-stopped</code>，主機重開機後容器會自動啟動。</li>
+  <li>記錄 CSV 每 60 秒約 46&nbsp;MB，請定期檢查 <code>saved_data/</code> 磁碟用量。</li>
+</ul>
+<div class="warn"><strong>安全提醒：</strong>本系統為區網應用（HTTP）。如需跨網段或對外提供，
+請置於反向代理（Nginx/Caddy）之後加上 TLS，勿直接暴露於公網。</div>
+
+<h2 id="trouble">10. 疑難排解</h2>
+<table>
+  <tr><th>症狀</th><th>處置</th></tr>
+  <tr>
+    <td>忘記 admin 密碼</td>
+    <td><code>docker compose down</code> → 刪除 <code>state/users.yaml</code> →
+        <code>ADMIN_PASSWORD=新密碼 docker compose up -d</code>（其他帳號需重建）</td>
+  </tr>
+  <tr>
+    <td>埠 8000 被占用</td>
+    <td>修改 <code>docker-compose.yml</code> 的 <code>ports</code>（例如 <code>"9000:8000"</code>）後重啟</td>
+  </tr>
+  <tr>
+    <td>按「啟動」顯示 DAQ 啟動失敗</td>
+    <td>確認 <code>DATA_SOURCE</code> 設定正確；nidaq 模式確認驅動已裝、裝置已接、
+        名稱與 <code>config.yaml</code> 一致（預設 <code>Dev1</code>）</td>
+  </tr>
+  <tr>
+    <td>頁面異常或改版後畫面沒更新</td>
+    <td>先 <kbd>Ctrl</kbd>+<kbd>F5</kbd> 強制重新整理；再檢查 <code>docker logs</code> 有無錯誤</td>
+  </tr>
+  <tr>
+    <td>模擬模式下 AI 一直顯示異常（紅字）</td>
+    <td><strong>正常現象</strong>——模型以真實馬達資料訓練，模擬訊號本就不會判為正常；
+        接上真實 DAQ 後才具參考性</td>
+  </tr>
+  <tr>
+    <td>回放顯示「資料不足」</td>
+    <td>該記錄長度不足 2048 點（0.41 秒），多為舊版桌面程式存的檔；新版存檔皆為完整 60 秒</td>
+  </tr>
+  <tr>
+    <td>登入顯示「失敗次數過多」</td>
+    <td>防爆破保護，等 60 秒後再試</td>
+  </tr>
+</table>
+
+<h3>故障類別代碼</h3>
+<p class="muted">模型輸出 12 類：N（正常）、RB、RB2、RBS、RBS1、RBS2、RU、RUB、RUB2、RUBS、RUBS1、RUBS2。
+各代碼的工程定義待模型訓練方提供後補充於此。</p>
+
+<hr>
+<p class="muted">文件由專案開發過程整理產出，指令均經實機驗證（x86_64 Ubuntu 22.04 建置
+＋ ARM64 容器 QEMU 模擬測試）。桌面版（CustomTkinter）之安裝與打包另見專案 README.md。</p>
+
+</div>
+</body>
+</html>

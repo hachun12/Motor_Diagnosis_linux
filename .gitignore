@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# PyInstaller 產物
+build/
+dist/
+
+# 執行期狀態（帳號、session 金鑰）——絕不入版控
+state/
+users.yaml
+.session_secret
+
+# 量測資料
+saved_data/*.csv
+
+# 除錯與打包暫存
+debug_*.txt
+motor-diagnosis-*.tar.gz
