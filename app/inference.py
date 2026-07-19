@@ -1,4 +1,4 @@
-"""AI 推論：MotorFaultCNN（自桌面版原樣移植）+ 背景推論服務。"""
+"""AI 推論：MotorFaultCNN + 背景推論服務（模型自模型庫載入，支援熱切換）。"""
 import threading
 import time
 from datetime import datetime
@@ -44,14 +44,18 @@ class MotorFaultCNN(nn.Module):
         return self.classifier(x)
 
 
-class MotorDiagnosisModel:
-    def __init__(self, cfg: Config):
-        self.classes = cfg.model_classes
-        self.window = cfg.model_window
+class LoadedModel:
+    """一組可推論的模型 + 其 meta（classes、normal、視窗）。"""
+
+    def __init__(self, name: str, weights_path: str, meta: dict):
+        self.name = name
+        self.classes = list(meta.get("classes", []))
+        self.normal_classes = set(meta.get("normal_classes", []))
+        self.window = int(meta.get("window", 2048))
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        state = torch.load(weights_path, map_location=self.device, weights_only=True)
         self.model = MotorFaultCNN(input_dim=6, num_classes=len(self.classes))
-        weights = torch.load(cfg.model_path, map_location=self.device)
-        self.model.load_state_dict(weights)
+        self.model.load_state_dict(state)
         self.model.to(self.device)
         self.model.eval()
 
@@ -68,16 +72,50 @@ class MotorDiagnosisModel:
 
 
 class InferenceService:
-    """背景執行緒：每 interval 秒取最新視窗推論一次。"""
+    """背景執行緒：每 interval 秒取最新視窗推論一次。模型可熱切換。"""
 
-    def __init__(self, cfg: Config, acquisition, log_fn, on_result):
+    def __init__(self, cfg: Config, acquisition, log_fn, on_result, registry):
         self.cfg = cfg
         self.acq = acquisition
         self._log = log_fn
-        self._on_result = on_result       # callback(result_dict)，執行緒安全由呼叫端處理
-        self.model = MotorDiagnosisModel(cfg)
+        self._on_result = on_result
+        self.registry = registry
         self._thread = None
-        self.latest = None                # 最近一次推論結果
+        self.latest = None
+
+        name = registry.active_name()
+        if not name:
+            raise RuntimeError("模型庫中沒有可用模型")
+        self.current = LoadedModel(name, registry.weights_path(name),
+                                   registry.get_meta(name) or {})
+
+    # 便捷屬性（回放與狀態端點使用）
+    @property
+    def window(self):
+        return self.current.window
+
+    @property
+    def normal_classes(self):
+        return self.current.normal_classes
+
+    def activate(self, name: str):
+        """熱切換：載入新模型成功後才替換引用，失敗不影響現役模型。"""
+        loaded = LoadedModel(name, self.registry.weights_path(name),
+                             self.registry.get_meta(name) or {})
+        self.current = loaded          # 引用替換為原子操作，推論端取區域引用使用
+        self.registry.mark_active(name)
+        self.latest = None
+        self._log(f"🧠 已啟用模型「{name}」（{len(loaded.classes)} 類，運行於 {loaded.device}）")
+
+    def build_result(self, pred: str, conf: float) -> dict:
+        is_normal = pred in self.current.normal_classes
+        return {
+            "class": pred,
+            "confidence": round(conf, 4),
+            "normal": is_normal,
+            "time": datetime.now().strftime("%H:%M:%S"),
+            **self.cfg.describe_class(pred),
+        }
 
     def start(self):
         """常駐背景執行緒：系統未啟動時待命，啟動後每 interval 秒推論一次。"""
@@ -92,25 +130,18 @@ class InferenceService:
             time.sleep(self.cfg.model_interval)
             if not self.acq.is_running:
                 continue
-            window = self.acq.latest_window(self.cfg.model_window)
+            model = self.current               # 取區域引用，避免切換途中換模型
+            window = self.acq.latest_window(model.window)
             if window is None:
                 continue
             try:
-                pred, conf = self.model.predict(window, keys)
+                pred, conf = model.predict(window, keys)
             except Exception as e:
                 self._log(f"❌ AI 推論發生錯誤: {e}")
                 continue
-            is_normal = pred in self.cfg.normal_classes
-            desc = self.cfg.describe_class(pred)
-            result = {
-                "class": pred,
-                "confidence": round(conf, 4),
-                "normal": is_normal,
-                "time": datetime.now().strftime("%H:%M:%S"),
-                **desc,
-            }
+            result = self.build_result(pred, conf)
             self.latest = result
-            if not is_normal:
-                self._log(f"⚠️ [AI 警報] 偵測到異常: {desc['name'] or pred}"
-                          f"（{desc['code']}，{conf * 100:.1f}%）")
+            if not result["normal"]:
+                self._log(f"⚠️ [AI 警報] 偵測到異常: {result['name'] or pred}"
+                          f"（{result['code']}，{conf * 100:.1f}%）")
             self._on_result(result)

@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>馬達即時診斷系統</title>
-<link rel="stylesheet" href="/static/vendor/uPlot.min.css?v=7">
-<link rel="stylesheet" href="/static/style.css?v=7">
+<link rel="stylesheet" href="/static/vendor/uPlot.min.css?v=8">
+<link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
 
@@ -14,6 +14,7 @@
   <nav class="tabs">
     <button class="tab-btn active" data-view="live">📊 即時監控</button>
     <button class="tab-btn" data-view="history">🗂️ 歷史記錄</button>
+    <button class="tab-btn" data-view="models" id="tab-models" hidden>🧠 模型管理</button>
   </nav>
   <div class="spacer"></div>
   <span class="status-pill" id="status-pill">待機</span>
@@ -138,6 +139,71 @@
   </div>
 </main>
 
+<!-- ═══ 模型管理（admin） ═══ -->
+<main id="view-models">
+  <div>
+    <div class="card">
+      <h3>🧠 模型庫 <span class="hint">啟用即熱切換，不中斷量測</span></h3>
+      <table id="models-table">
+        <thead><tr><th>名稱</th><th>類別</th><th>驗證準確率</th><th>建立時間</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>📥 匯入模型</h3>
+      <label class="field-label">模型名稱</label>
+      <input type="text" id="import-name" class="field" placeholder="例如：外部訓練_20260720">
+      <label class="field-label">權重檔（.pth，上限 50MB）</label>
+      <input type="file" id="import-file" class="field" accept=".pth">
+      <label class="field-label">類別清單（逗號分隔；留空 = 沿用當前模型類別）</label>
+      <input type="text" id="import-classes" class="field" placeholder="H, RB-1, RB-2, …">
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-primary" id="btn-import">上傳並驗證</button>
+      </div>
+      <p class="dialog-error" id="import-error" hidden></p>
+    </div>
+  </div>
+  <div>
+    <div class="card">
+      <h3>🎓 訓練新模型
+        <button class="btn btn-sm btn-gray" id="btn-train-rescan" style="float:right;">重新掃描資料</button>
+      </h3>
+      <p class="muted" style="font-size:12px;">資料來源為「歷史記錄」中的標註存檔。
+      為每個標籤指定類別代號後開始訓練；訓練於本機背景執行，完成後需手動至模型庫啟用。</p>
+      <table id="train-table">
+        <thead><tr><th>標籤</th><th>檔案</th><th>時長</th><th>訓練視窗</th><th>對應類別</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="muted" id="train-empty" hidden>尚無標註記錄，請先於即時監控頁存檔。</p>
+
+      <label class="field-label">新模型名稱</label>
+      <input type="text" id="train-name" class="field" placeholder="例如：現場重訓_20260720">
+      <details style="margin-top:8px;">
+        <summary class="muted" style="cursor:pointer;">進階參數</summary>
+        <div class="train-params">
+          <label>Epochs <input type="number" id="tp-epochs" value="50" min="1" max="500"></label>
+          <label>學習率 <input type="number" id="tp-lr" value="0.001" step="0.0001" min="0.000001" max="1"></label>
+          <label>Batch <input type="number" id="tp-batch" value="64" min="8" max="512"></label>
+          <label>驗證集比例 <input type="number" id="tp-val" value="0.2" step="0.05" min="0.05" max="0.5"></label>
+          <label>視窗間隔 stride <input type="number" id="tp-stride" value="1024" min="256" max="8192"></label>
+        </div>
+      </details>
+      <div class="btn-row" style="margin-top:10px;">
+        <button class="btn btn-start" id="btn-train-start">🎓 開始訓練</button>
+        <button class="btn btn-stop" id="btn-train-cancel" disabled>取消</button>
+      </div>
+      <p class="dialog-error" id="train-error" hidden></p>
+    </div>
+    <div class="card" id="train-progress-card" hidden>
+      <h3>📉 訓練進度：<span id="train-job-name" class="muted"></span></h3>
+      <div class="progress-outer"><div class="progress-inner" id="train-progress-bar"></div></div>
+      <p id="train-stage" class="muted" style="font-size:13px;"></p>
+      <div class="chart-wrap" id="chart-train" style="height:200px;"></div>
+      <div id="train-result" class="muted" style="font-size:12.5px; margin-top:8px;"></div>
+    </div>
+  </div>
+</main>
+
 <!-- ═══ 對話框 ═══ -->
 <dialog id="dlg-pwd">
   <h3>修改密碼</h3>
@@ -174,7 +240,7 @@
   </form>
 </dialog>
 
-<script src="/static/vendor/uPlot.iife.min.js?v=7"></script>
-<script src="/static/app.js?v=7"></script>
+<script src="/static/vendor/uPlot.iife.min.js?v=8"></script>
+<script src="/static/app.js?v=8"></script>
 </body>
 </html>

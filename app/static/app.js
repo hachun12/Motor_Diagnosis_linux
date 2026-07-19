@@ -15,7 +15,8 @@ let running = false;
 
 /* ── API 輔助：401 一律導回登入頁 ─────────────────────── */
 async function api(path, opts = {}) {
-  if (opts.body && !(opts.headers || {})["Content-Type"]) {
+  if (opts.body && !(opts.body instanceof FormData)
+      && !(opts.headers || {})["Content-Type"]) {
     opts.headers = Object.assign({ "Content-Type": "application/json" }, opts.headers);
   }
   const res = await fetch(path, opts);
@@ -191,7 +192,19 @@ function handleMessage(msg) {
   } else if (msg.type === "status") {
     setRunning(msg.running);
     if (!msg.running) resetStatusUI();
+  } else if (msg.type === "training") {
+    if (me && me.role === "admin") renderTraining(msg);
+  } else if (msg.type === "model") {
+    activeModelName = msg.name;
+    renderDriverInfo();
   }
+}
+
+let activeModelName = "";
+let driverInfoText = "";
+function renderDriverInfo() {
+  document.getElementById("driver-info").textContent =
+    driverInfoText + (activeModelName ? `｜模型：${activeModelName}` : "");
 }
 
 function updateIso(iso) {
@@ -290,9 +303,10 @@ document.getElementById("btn-save").addEventListener("click", async () => {
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b === btn));
-    document.getElementById("view-live").classList.toggle("active", btn.dataset.view === "live");
-    document.getElementById("view-history").classList.toggle("active", btn.dataset.view === "history");
+    document.querySelectorAll("main").forEach((m) =>
+      m.classList.toggle("active", m.id === `view-${btn.dataset.view}`));
     if (btn.dataset.view === "history") loadRecordings();
+    if (btn.dataset.view === "models") { loadModels(); loadTrainingOverview(); }
   });
 });
 
@@ -414,6 +428,207 @@ function renderPlayback() {
 document.getElementById("play-slider").addEventListener("input", schedulePlayFetch);
 document.getElementById("play-window").addEventListener("change", fetchPlayData);
 
+/* ── 模型管理（admin） ────────────────────────────────── */
+async function loadModels() {
+  const models = await api("/api/models");
+  const tbody = document.querySelector("#models-table tbody");
+  tbody.innerHTML = "";
+  models.forEach((m) => {
+    const tr = document.createElement("tr");
+    const acc = m.val_accuracy != null ? `${(m.val_accuracy * 100).toFixed(1)}%` : "—";
+    const nameCell = document.createElement("td");
+    nameCell.textContent = m.name;
+    if (m.active) {
+      const badge = document.createElement("span");
+      badge.className = "badge-active"; badge.textContent = "啟用中";
+      nameCell.appendChild(badge);
+    }
+    tr.appendChild(nameCell);
+    tr.insertAdjacentHTML("beforeend", `<td>${m.num_classes} 類</td><td>${acc}</td><td>${m.created}</td>`);
+    const td = document.createElement("td");
+    if (!m.active) {
+      const act = document.createElement("button");
+      act.className = "btn btn-sm btn-primary"; act.textContent = "啟用";
+      act.addEventListener("click", async () => {
+        try { await api(`/api/models/${encodeURIComponent(m.name)}/activate`, { method: "POST" }); await loadModels(); }
+        catch (e) { alert(e.message); }
+      });
+      td.appendChild(act);
+      const del = document.createElement("button");
+      del.className = "btn btn-sm btn-gray"; del.textContent = "刪除";
+      del.addEventListener("click", async () => {
+        if (!confirm(`確定刪除模型「${m.name}」？`)) return;
+        try { await api(`/api/models/${encodeURIComponent(m.name)}`, { method: "DELETE" }); await loadModels(); }
+        catch (e) { alert(e.message); }
+      });
+      td.appendChild(del);
+    }
+    const dl = document.createElement("a");
+    dl.href = `/api/models/${encodeURIComponent(m.name)}/download`;
+    dl.className = "btn btn-sm btn-gray"; dl.textContent = "下載";
+    dl.style.textDecoration = "none";
+    td.appendChild(dl);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  });
+}
+
+document.getElementById("btn-import").addEventListener("click", async () => {
+  const err = document.getElementById("import-error");
+  err.hidden = true;
+  const name = document.getElementById("import-name").value.trim();
+  const file = document.getElementById("import-file").files[0];
+  if (!name || !file) {
+    err.textContent = "請填寫模型名稱並選擇 .pth 檔"; err.hidden = false; return;
+  }
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("name", name);
+  fd.append("classes", document.getElementById("import-classes").value.trim());
+  try {
+    await api("/api/models/import", { method: "POST", body: fd });
+    document.getElementById("import-name").value = "";
+    document.getElementById("import-file").value = "";
+    document.getElementById("import-classes").value = "";
+    await loadModels();
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+});
+
+/* ── 訓練面板 ─────────────────────────────────────────── */
+let knownCodes = [];
+
+async function loadTrainingOverview() {
+  const data = await api("/api/training/overview");
+  knownCodes = data.known_codes || [];
+  const tbody = document.querySelector("#train-table tbody");
+  tbody.innerHTML = "";
+  document.getElementById("train-empty").hidden = data.groups.length > 0;
+  data.groups.forEach((g) => {
+    const tr = document.createElement("tr");
+    tr.insertAdjacentHTML("beforeend",
+      `<td>${g.label}</td><td>${g.files}</td><td>${g.seconds}s</td><td>${g.windows}</td>`);
+    const td = document.createElement("td");
+    const sel = document.createElement("select");
+    sel.dataset.label = g.label;
+    sel.innerHTML = '<option value="">（不使用）</option>'
+      + knownCodes.map((c) => `<option value="${c}">${c}</option>`).join("")
+      + '<option value="__custom__">自訂…</option>';
+    // 標籤與已知代號同名時自動對應
+    const hit = knownCodes.find((c) => c.toLowerCase() === g.label.toLowerCase());
+    if (hit) sel.value = hit;
+    sel.addEventListener("change", () => {
+      if (sel.value === "__custom__") {
+        const custom = (prompt("輸入新類別代號（例如 RB-3）：") || "").trim();
+        if (custom && !knownCodes.includes(custom)) {
+          knownCodes.push(custom);
+          document.querySelectorAll("#train-table select").forEach((s) => {
+            const keep = s.value;
+            s.insertAdjacentHTML("beforeend", `<option value="${custom}">${custom}</option>`);
+            s.value = keep === "__custom__" && s === sel ? custom : keep;
+          });
+        }
+        sel.value = custom && knownCodes.includes(custom) ? custom : "";
+      }
+    });
+    td.appendChild(sel);
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  });
+}
+document.getElementById("btn-train-rescan").addEventListener("click", loadTrainingOverview);
+
+let trainChart = null;
+function ensureTrainChart() {
+  if (trainChart) return;
+  const el = document.getElementById("chart-train");
+  trainChart = new uPlot({
+    width: el.clientWidth || 500, height: 200,
+    legend: { show: true },
+    scales: { x: { time: false }, loss: { auto: true }, acc: { range: () => [0, 1] } },
+    series: [
+      { label: "epoch" },
+      { label: "train loss", stroke: "#FF9900", width: 1.5, scale: "loss", points: { show: false } },
+      { label: "val acc", stroke: "#00FF88", width: 1.5, scale: "acc", points: { show: false } },
+    ],
+    axes: [
+      Object.assign({}, AXIS_STYLE),
+      Object.assign({ scale: "loss", space: 20 }, AXIS_STYLE),
+      Object.assign({ scale: "acc", side: 1, space: 20,
+                      values: (u, vs) => vs.map((v) => `${(v * 100).toFixed(0)}%`) }, AXIS_STYLE),
+    ],
+  }, [[], [], []], el);
+  new ResizeObserver(() => {
+    if (el.clientWidth > 0) trainChart.setSize({ width: el.clientWidth, height: 200 });
+  }).observe(el);
+}
+
+function renderTraining(st) {
+  const card = document.getElementById("train-progress-card");
+  if (!st || st.epoch === undefined && !st.running && !st.done && !st.error) {
+    card.hidden = true; return;
+  }
+  card.hidden = false;
+  ensureTrainChart();
+  document.getElementById("train-job-name").textContent = st.name || "";
+  const pct = st.epochs ? Math.round(((st.epoch || 0) / st.epochs) * 100) : 0;
+  document.getElementById("train-progress-bar").style.width = `${pct}%`;
+  let stage = st.stage || "";
+  if (st.running && st.epoch) {
+    stage = `Epoch ${st.epoch}/${st.epochs}｜loss ${st.train_loss}｜驗證準確率 ${(st.val_acc * 100).toFixed(1)}%（最佳 ${(st.best_acc * 100).toFixed(1)}%）`;
+  }
+  document.getElementById("train-stage").textContent = stage;
+  const h = st.history || [];
+  trainChart.setData([h.map((r) => r.epoch), h.map((r) => r.loss), h.map((r) => r.val_acc)]);
+
+  const result = document.getElementById("train-result");
+  if (st.done && st.per_class) {
+    result.innerHTML = "各類別驗證準確率：" + Object.entries(st.per_class)
+      .map(([c, a]) => `${c} ${(a * 100).toFixed(0)}%`).join("｜")
+      + "<br>模型已存入模型庫，請於左側啟用。";
+  } else if (st.error) {
+    result.textContent = `錯誤：${st.error}`;
+  } else if (st.cancelled) {
+    result.textContent = "已取消。";
+  } else {
+    result.textContent = "";
+  }
+  document.getElementById("btn-train-start").disabled = !!st.running;
+  document.getElementById("btn-train-cancel").disabled = !st.running;
+  if ((st.done || st.error || st.cancelled) && !st.running) loadModels();
+}
+
+document.getElementById("btn-train-start").addEventListener("click", async () => {
+  const err = document.getElementById("train-error");
+  err.hidden = true;
+  const mapping = {};
+  document.querySelectorAll("#train-table select").forEach((s) => {
+    if (s.value && s.value !== "__custom__") mapping[s.dataset.label] = s.value;
+  });
+  const name = document.getElementById("train-name").value.trim();
+  if (!name) { err.textContent = "請輸入新模型名稱"; err.hidden = false; return; }
+  try {
+    await api("/api/training/start", {
+      method: "POST",
+      body: JSON.stringify({
+        name, mapping,
+        params: {
+          epochs: +document.getElementById("tp-epochs").value,
+          lr: +document.getElementById("tp-lr").value,
+          batch_size: +document.getElementById("tp-batch").value,
+          val_split: +document.getElementById("tp-val").value,
+          stride: +document.getElementById("tp-stride").value,
+        },
+      }),
+    });
+    if (trainChart) trainChart.setData([[], [], []]);
+    document.getElementById("btn-train-start").disabled = true;
+    document.getElementById("btn-train-cancel").disabled = false;
+  } catch (e) { err.textContent = e.message; err.hidden = false; }
+});
+
+document.getElementById("btn-train-cancel").addEventListener("click", () =>
+  api("/api/training/cancel", { method: "POST" }).catch(() => {}));
+
 /* ── 帳號選單 ─────────────────────────────────────────── */
 document.getElementById("btn-logout").addEventListener("click", async () => {
   await api("/api/logout", { method: "POST" });
@@ -506,11 +721,18 @@ async function init() {
 
   const status = await api("/api/status");
   sampleRate = status.sample_rate || 5000;
-  document.getElementById("driver-info").textContent =
+  driverInfoText =
     `資料源：${status.driver}｜取樣率：${status.sample_rate} Hz｜歷史：${status.history_seconds} 秒`;
+  activeModelName = status.model ? status.model.name : "";
+  renderDriverInfo();
   setRunning(status.running);
   updateButtons();
   if (status.ai) handleMessage(Object.assign({ type: "ai" }, status.ai));
+
+  if (me.role === "admin") {
+    document.getElementById("tab-models").hidden = false;
+    api("/api/training/status").then((st) => renderTraining(st)).catch(() => {});
+  }
 
   (await api("/api/logs")).forEach((l) => appendLog(l.time, l.message));
   await loadLabels();

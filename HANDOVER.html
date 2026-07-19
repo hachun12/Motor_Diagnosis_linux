@@ -202,7 +202,7 @@ session 有效 12 小時，逾期需重新登入。</div>
   <tr><td>查看日誌</td><td><code>docker logs -f motor-diagnosis</code></td></tr>
   <tr><td>重啟 / 停止</td><td><code>docker compose restart</code>｜<code>docker compose down</code></td></tr>
   <tr><td>更新版本</td><td>覆蓋新版專案檔後 <code>docker compose up -d --build</code>（資料目錄不受影響）</td></tr>
-  <tr><td>備份</td><td>打包 <code>saved_data/</code> 與 <code>state/</code> 兩個資料夾即可完整還原資料與帳號</td></tr>
+  <tr><td>備份</td><td>打包 <code>saved_data/</code>、<code>state/</code>、<code>models/</code> 三個資料夾即可完整還原資料、帳號與模型</td></tr>
 </table>
 <ul>
   <li>服務設定 <code>restart: unless-stopped</code>，主機重開機後容器會自動啟動。</li>
@@ -210,6 +210,24 @@ session 有效 12 小時，逾期需重新登入。</div>
 </ul>
 <div class="warn"><strong>安全提醒：</strong>本系統為區網應用（HTTP）。如需跨網段或對外提供，
 請置於反向代理（Nginx/Caddy）之後加上 TLS，勿直接暴露於公網。</div>
+
+<h2 id="models">9.5 模型管理（admin）</h2>
+<p>WebUI「🧠 模型管理」頁籤提供模型版本管理，資料存於 <code>models/</code> volume：</p>
+<ul>
+  <li><strong>模型庫</strong>：列出所有模型（含驗證準確率）；「啟用」為熱切換，
+      不中斷量測；啟用中的模型不可刪除；「下載」可匯出權重檔備份或搬遷。</li>
+  <li><strong>匯入</strong>：上傳外部訓練的 <code>.pth</code> 權重（上限 50MB，
+      結構需為本系統的 MotorFaultCNN）。系統以安全模式載入並驗證後才入庫，
+      無效或惡意檔案會被拒絕。類別清單留空表示沿用當前模型的類別。</li>
+  <li><strong>訓練新模型</strong>：以「歷史記錄」的標註存檔為資料來源。
+      為每個標籤指定類別代號（標籤名與代號相同會自動對應）→ 設定模型名稱 → 開始訓練。
+      訓練於部署機背景執行（CPU，資料量大時需數分鐘～數十分鐘），
+      進度與 loss/準確率曲線即時顯示；完成後<strong>不會自動啟用</strong>，
+      請檢視各類別驗證準確率後手動啟用。</li>
+</ul>
+<div class="warn">首次啟動時內建權重會自動遷移為模型庫的「default」項目；
+任何時候都可切回 default 回復出廠模型。訓練會佔用 CPU，建議於非量測時段執行。
+每個類別的訓練樣本視窗數過少（&lt;10）會拒絕開始，請先累積足夠的標註記錄。</div>
 
 <h2 id="trouble">10. 疑難排解</h2>
 <table>

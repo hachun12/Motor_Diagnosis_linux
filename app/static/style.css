@@ -162,6 +162,29 @@ dialog .btn-row { margin-top: 16px; }
 .dialog-error { color: var(--danger); font-size: 12px; margin: 8px 0 0; }
 #users-table { margin-bottom: 10px; }
 
+/* ── 模型管理 ── */
+#view-models { grid-template-columns: minmax(300px, 1fr) minmax(0, 1.4fr); align-items: start; }
+.field-label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 12px; }
+.field {
+  width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--box); color: var(--text); font-size: 13px;
+}
+input[type=file].field { padding: 6px; }
+.train-params { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin-top: 8px; }
+.train-params label { color: var(--muted); font-size: 12px; display: flex;
+  flex-direction: column; gap: 3px; }
+.train-params input {
+  padding: 6px 8px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--box); color: var(--text);
+}
+.progress-outer { background: var(--box); border-radius: 6px; height: 14px; overflow: hidden; }
+.progress-inner { background: var(--accent); height: 100%; width: 0; transition: width .3s; }
+.badge-active {
+  background: #10361f; color: var(--normal); border-radius: 10px;
+  padding: 1px 8px; font-size: 11px; margin-left: 6px;
+}
+#models-table select, #train-table select { width: auto; padding: 5px 8px; }
+
 /* ── hover 數值提示 ── */
 .chart-tip {
   position: absolute; z-index: 20; pointer-events: none;

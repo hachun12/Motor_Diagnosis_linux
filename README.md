@@ -21,7 +21,9 @@
 - ISO 10816 RMS 分區燈號 + AI 模型即時診斷（每秒一次）
 - 標籤存檔：60 秒歷史 → CSV（每筆樣本含完整時間戳）
 - 歷史記錄：清單、下載、**回放**（時間軸拉桿瀏覽波形與該視窗頻譜）
-- 登入權限：`admin`（控制/存檔/使用者管理）與 `viewer`（僅觀看）
+- 登入權限：`admin`（控制/存檔/使用者/模型管理）與 `viewer`（僅觀看）
+- 模型管理（admin）：模型庫版本管理與熱切換、外部權重匯入（安全驗證）、
+  以標註記錄於部署機上訓練新模型（背景執行、進度曲線、完成後手動啟用）
 - 系統日誌即時推播
 
 ### 架構
@@ -52,7 +54,8 @@ ADMIN_PASSWORD=你的管理員密碼 docker compose up -d --build
 ```
 
 - 未設 `ADMIN_PASSWORD` 時會產生隨機密碼並寫入容器日誌（`docker logs motor-diagnosis`）。
-- 資料持久化：`./saved_data`（記錄 CSV）、`./state`（使用者、標籤、session 金鑰）。
+- 資料持久化：`./saved_data`（記錄 CSV）、`./state`（使用者、標籤、session 金鑰）、
+  `./models`（模型庫；首次啟動自動把內建權重遷移為 `default`）。
 - 切換資料源：`DATA_SOURCE=simulator|nidaq|replay`（環境變數，優先於 config.yaml）。
 
 #### Multi-arch 建置（x64 開發機 → ARM64 目標機）

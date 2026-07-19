@@ -17,5 +17,6 @@ services:
     volumes:
       - ./saved_data:/app/saved_data
       - ./state:/app/state
+      - ./models:/app/models
       - ./config.yaml:/app/config.yaml:ro
     restart: unless-stopped

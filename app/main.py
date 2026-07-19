@@ -4,13 +4,15 @@ REST 控制 + WebSocket 即時推播（波形 / 頻譜 / ISO / AI / 日誌）。
 """
 import asyncio
 import os
+import tempfile
 import threading
 from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime
 
 import numpy as np
-from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (Depends, FastAPI, File, Form, HTTPException, Request,
+                     UploadFile, WebSocket, WebSocketDisconnect)
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -21,7 +23,9 @@ from .auth import COOKIE_NAME, AuthManager
 from .config import STATIC_DIR, load_config
 from .datasource.replay import load_csv_channels
 from .inference import InferenceService
+from .model_registry import MAX_WEIGHTS_BYTES, ModelRegistry
 from .recorder import Recorder
+from .training import TrainingService
 
 cfg = load_config()
 
@@ -85,7 +89,9 @@ logbuf = LogBuffer(hub)
 acq = AcquisitionService(cfg, logbuf.log)
 recorder = Recorder(cfg, acq, logbuf.log)
 auth = AuthManager(cfg, logbuf.log)
-inference = None  # 模型於 lifespan 載入（啟動失敗時給出明確訊息）
+registry = ModelRegistry(cfg, logbuf.log)
+inference = None   # 模型於 lifespan 載入（啟動失敗時給出明確訊息）
+training = None
 
 
 # ══════════════════════════════════════════════════════════════
@@ -138,14 +144,17 @@ async def spectrum_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global inference
+    global inference, training
     hub.loop = asyncio.get_running_loop()
     logbuf.log("系統初始化完成，等待啟動...")
     inference = InferenceService(
         cfg, acq, logbuf.log,
-        on_result=lambda r: hub.publish_threadsafe({"type": "ai", **r}))
+        on_result=lambda r: hub.publish_threadsafe({"type": "ai", **r}),
+        registry=registry)
     inference.start()  # 常駐推論執行緒（未啟動採樣時待命）
-    logbuf.log(f"AI 模型載入完成（運行於 {inference.model.device}）")
+    training = TrainingService(cfg, registry, logbuf.log, hub.publish_threadsafe)
+    logbuf.log(f"AI 模型「{inference.current.name}」載入完成"
+               f"（{len(inference.current.classes)} 類，運行於 {inference.current.device}）")
     logbuf.log(f"資料源設定：{cfg.driver}")
     tasks = [asyncio.create_task(wave_loop()), asyncio.create_task(spectrum_loop())]
     yield
@@ -295,6 +304,8 @@ def status(user=Depends(require_user)):
         "current_keys": cfg.current_keys,
         "vibration_keys": cfg.vibration_keys,
         "ai": inference.latest if inference else None,
+        "model": {"name": inference.current.name,
+                  "num_classes": len(inference.current.classes)} if inference else None,
         "error": acq.error,
     }
 
@@ -377,25 +388,134 @@ def recording_data(name: str, start: float = 0.0, window: float = 2.0,
         freqs = freqs or f
         spec[k] = m
 
-    # 對本視窗最後 model_window（2048）點跑模型判斷
+    # 對本視窗最後 model_window 點跑模型判斷（使用當前啟用模型）
     ai = None
-    if seg.shape[1] >= cfg.model_window:
-        win = {k: seg[i, -cfg.model_window:].tolist()
+    model = inference.current
+    if seg.shape[1] >= model.window:
+        win = {k: seg[i, -model.window:].tolist()
                for i, k in enumerate(cfg.channel_keys)}
         try:
-            pred, conf = inference.model.predict(win, cfg.channel_keys)
-            ai = {"class": pred, "confidence": round(conf, 4),
-                  "normal": pred in cfg.normal_classes,
-                  **cfg.describe_class(pred)}
+            pred, conf = model.predict(win, cfg.channel_keys)
+            ai = inference.build_result(pred, conf)
         except Exception as e:
             logbuf.log(f"❌ 回放推論失敗: {e}")
     else:
-        ai = {"insufficient": True, "needed": cfg.model_window,
+        ai = {"insufficient": True, "needed": model.window,
               "got": int(seg.shape[1])}
 
     return {"total_seconds": round(total_seconds, 2), "fs": fs,
             "start": round(start, 3), "window": window,
             "t": t, "wave": wave, "freqs": freqs, "spectrum": spec, "ai": ai}
+
+
+# ══════════════════════════════════════════════════════════════
+#  模型管理
+# ══════════════════════════════════════════════════════════════
+@app.get("/api/models")
+def list_models(user=Depends(require_admin)):
+    return registry.list_models()
+
+
+@app.post("/api/models/import")
+async def import_model(user=Depends(require_admin),
+                       file: UploadFile = File(...),
+                       name: str = Form(...),
+                       classes: str = Form("")):
+    """匯入 .pth 權重。classes 為逗號分隔的類別清單；留空沿用當前模型的類別。"""
+    data = await file.read()
+    if len(data) > MAX_WEIGHTS_BYTES:
+        raise HTTPException(400, "權重檔超過 50MB 上限")
+    class_list = ([c.strip() for c in classes.split(",") if c.strip()]
+                  if classes.strip() else list(inference.current.classes))
+    meta = {
+        "classes": class_list,
+        "normal_classes": [c for c in class_list if c in ("H", "N")],
+        "window": inference.current.window,
+        "source": f"匯入（{file.filename}，由 {user['username']} 上傳）",
+        "val_accuracy": None,
+    }
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".pth", delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = tmp.name
+        saved = registry.save_model(name, tmp_path, meta)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    finally:
+        if tmp_path:
+            os.unlink(tmp_path)
+    logbuf.log(f"📥 管理員 {user['username']} 匯入模型「{saved}」（{len(class_list)} 類）")
+    return {"ok": True, "name": saved}
+
+
+@app.post("/api/models/{name}/activate")
+def activate_model(name: str, user=Depends(require_admin)):
+    try:
+        inference.activate(name)
+    except FileNotFoundError:
+        raise HTTPException(404, "模型不存在")
+    except Exception as e:
+        raise HTTPException(400, f"啟用失敗：{e}")
+    hub.publish_threadsafe({"type": "model", "name": inference.current.name})
+    return {"ok": True}
+
+
+@app.delete("/api/models/{name}")
+def delete_model(name: str, user=Depends(require_admin)):
+    try:
+        registry.delete(name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    logbuf.log(f"🗑️ 管理員 {user['username']} 刪除模型「{name}」")
+    return {"ok": True}
+
+
+@app.get("/api/models/{name}/download")
+def download_model(name: str, user=Depends(require_admin)):
+    try:
+        path = registry.weights_path(name)
+    except (FileNotFoundError, ValueError):
+        raise HTTPException(404, "模型不存在")
+    return FileResponse(path, filename=f"{name}.pth",
+                        media_type="application/octet-stream")
+
+
+# ══════════════════════════════════════════════════════════════
+#  模型訓練
+# ══════════════════════════════════════════════════════════════
+class TrainBody(BaseModel):
+    name: str
+    mapping: dict
+    params: dict = {}
+
+
+@app.get("/api/training/overview")
+def training_overview(user=Depends(require_admin)):
+    known = list(dict.fromkeys(
+        [v.get("code") for v in cfg.class_info.values() if v.get("code")]
+        + list(inference.current.classes)))
+    return {"groups": training.dataset_overview(), "known_codes": known}
+
+
+@app.post("/api/training/start")
+def training_start(body: TrainBody, user=Depends(require_admin)):
+    try:
+        training.start(body.name, body.mapping, body.params)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
+@app.post("/api/training/cancel")
+def training_cancel(user=Depends(require_admin)):
+    training.cancel()
+    return {"ok": True}
+
+
+@app.get("/api/training/status")
+def training_status(user=Depends(require_admin)):
+    return training.status
 
 
 # ══════════════════════════════════════════════════════════════

@@ -6,6 +6,7 @@ dist
 *.spec
 saved_data
 state
+models
 users.yaml
 .session_secret
 debug_*.txt

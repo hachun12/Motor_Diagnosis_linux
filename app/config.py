@@ -10,6 +10,7 @@ CONFIG_FILE = os.environ.get("CONFIG_FILE", os.path.join(ROOT_DIR, "config.yaml"
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(ROOT_DIR, "saved_data"))
 LABELS_FILE = os.environ.get("LABELS_FILE", os.path.join(ROOT_DIR, "saved_labels.json"))
 USERS_FILE = os.environ.get("USERS_FILE", os.path.join(ROOT_DIR, "users.yaml"))
+MODELS_DIR = os.environ.get("MODELS_DIR", os.path.join(ROOT_DIR, "models"))
 SECRET_FILE = os.environ.get("SECRET_FILE", os.path.join(ROOT_DIR, ".session_secret"))
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
@@ -69,8 +70,15 @@ class Config:
         self.port = int(os.environ.get("PORT", srv.get("port", 8000)))
 
     def describe_class(self, pred: str) -> dict:
-        """模型類別 → 顯示用說明（代號、名稱、故障程度）。未定義時回傳空欄位。"""
+        """模型類別 → 顯示用說明（代號、名稱、故障程度）。未定義時回傳空欄位。
+
+        同時支援以內部類別（N、RBS1…）或實驗代號（H、RBS-2…）查找——
+        新訓練的模型會直接以實驗代號作為類別名稱。
+        """
         info = self.class_info.get(pred)
+        if not info:  # 以實驗代號反查
+            info = next((v for v in self.class_info.values()
+                         if v.get("code") == pred), None)
         if not info:
             return {"code": pred, "name": "", "detail": ""}
         if pred in self.normal_classes:

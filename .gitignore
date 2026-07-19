@@ -15,6 +15,9 @@ users.yaml
 # 量測資料
 saved_data/*.csv
 
+# 模型庫（執行期產物；內建權重會自動遷移為 default）
+models/
+
 # 除錯與打包暫存
 debug_*.txt
 motor-diagnosis-*.tar.gz

@@ -6,5 +6,6 @@ torch>=2.3
 pyyaml>=6.0
 bcrypt>=4.1
 itsdangerous>=2.2
+python-multipart>=0.0.9
 # nidaqmx 為選配：僅 x86_64 且已裝 NI-DAQmx 驅動的主機需要
 # nidaqmx>=1.0
