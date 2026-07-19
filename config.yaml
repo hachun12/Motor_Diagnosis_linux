@@ -36,6 +36,21 @@ model:
   interval_seconds: 1.0      # 推論週期
   classes: [N, RB, RB2, RBS, RBS1, RBS2, RU, RUB, RUB2, RUBS, RUBS1, RUBS2]
   normal_classes: [N]        # 視為正常的類別
+  # 類別詳細說明（依訓練資料定義；code 為實驗代號，
+  # broken_bars=轉子斷條數量、shorted=繞組短路數量、weight=掛載砝碼）
+  class_info:
+    N:     {code: H,      name: 健康馬達,                         broken_bars: 0, shorted: 0, weight: 0}
+    RB:    {code: RB-1,   name: 轉子斷條,                         broken_bars: 2, shorted: 0, weight: 0}
+    RB2:   {code: RB-2,   name: 轉子斷條,                         broken_bars: 4, shorted: 0, weight: 0}
+    RBS:   {code: RBS-1,  name: 轉子斷條＋定子短路,               broken_bars: 2, shorted: 1, weight: 0}
+    RBS1:  {code: RBS-2,  name: 轉子斷條＋定子短路,               broken_bars: 4, shorted: 1, weight: 0}
+    RBS2:  {code: RBS-3,  name: 轉子斷條＋定子短路,               broken_bars: 4, shorted: 2, weight: 0}
+    RU:    {code: RU,     name: 轉子不平衡,                       broken_bars: 0, shorted: 0, weight: 1}
+    RUB:   {code: RUB-1,  name: 轉子斷條＋轉子不平衡,             broken_bars: 2, shorted: 0, weight: 1}
+    RUB2:  {code: RUB-2,  name: 轉子斷條＋轉子不平衡,             broken_bars: 4, shorted: 0, weight: 1}
+    RUBS:  {code: RUBS-1, name: 轉子斷條＋轉子不平衡＋定子短路,   broken_bars: 2, shorted: 1, weight: 1}
+    RUBS1: {code: RUBS-2, name: 轉子斷條＋轉子不平衡＋定子短路,   broken_bars: 4, shorted: 1, weight: 1}
+    RUBS2: {code: RUBS-3, name: 轉子斷條＋轉子不平衡＋定子短路,   broken_bars: 4, shorted: 2, weight: 1}
 
 iso10816:                    # 振動 RMS 分區門檻 (g)
   zone_a: 0.28

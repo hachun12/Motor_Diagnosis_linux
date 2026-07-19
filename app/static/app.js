@@ -183,8 +183,9 @@ function handleMessage(msg) {
     renderSpectrum();
   } else if (msg.type === "ai") {
     const el = document.getElementById("ai-result");
-    el.textContent = `${msg.class} (${(msg.confidence * 100).toFixed(1)}%)`;
+    el.textContent = aiText(msg);
     el.style.color = msg.normal ? ISO_COLORS.normal : ISO_COLORS.danger;
+    document.getElementById("ai-detail").textContent = msg.detail || "";
   } else if (msg.type === "log") {
     appendLog(msg.time, msg.message);
   } else if (msg.type === "status") {
@@ -209,6 +210,13 @@ function resetStatusUI() {
   document.getElementById("iso-rms").textContent = "RMS: ---";
   const ai = document.getElementById("ai-result");
   ai.textContent = "等待資料..."; ai.style.color = "#AAAAAA";
+  document.getElementById("ai-detail").textContent = "";
+}
+
+/* 診斷結果顯示文字：中文名稱（實驗代號）信心% */
+function aiText(ai) {
+  const pct = `${(ai.confidence * 100).toFixed(1)}%`;
+  return ai.name ? `${ai.name}（${ai.code}） ${pct}` : `${ai.class} (${pct})`;
 }
 
 /* ── 日誌 ─────────────────────────────────────────────── */
@@ -379,14 +387,17 @@ async function fetchPlayData() {
 
 function renderPlayAI(ai) {
   const el = document.getElementById("play-ai");
+  const detail = document.getElementById("play-ai-detail");
+  detail.textContent = "";
   if (!ai) {
     el.textContent = "推論失敗"; el.style.color = "#AAAAAA";
   } else if (ai.insufficient) {
     el.textContent = `資料不足（${ai.got}/${ai.needed} 點）`;
     el.style.color = "#AAAAAA";
   } else {
-    el.textContent = `${ai.class} (${(ai.confidence * 100).toFixed(1)}%)`;
+    el.textContent = aiText(ai);
     el.style.color = ai.normal ? ISO_COLORS.normal : ISO_COLORS.danger;
+    detail.textContent = ai.detail || "";
   }
 }
 

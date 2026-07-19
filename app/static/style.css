@@ -111,6 +111,8 @@ main.active { display: grid; }
 #iso-rms { margin-left: auto; color: var(--muted); font-size: 11px; }
 #ai-result { font-size: 15px; font-weight: bold; color: #00BFFF; }
 .ai-label { color: var(--muted); font-size: 12px; }
+.ai-box { flex-direction: column; align-items: flex-start; gap: 2px; }
+.ai-detail { color: var(--muted); font-size: 11.5px; min-height: 1em; }
 
 /* ── 存檔 ── */
 .save-row { display: flex; gap: 6px; margin-bottom: 8px; }

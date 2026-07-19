@@ -101,13 +101,16 @@ class InferenceService:
                 self._log(f"❌ AI 推論發生錯誤: {e}")
                 continue
             is_normal = pred in self.cfg.normal_classes
+            desc = self.cfg.describe_class(pred)
             result = {
                 "class": pred,
                 "confidence": round(conf, 4),
                 "normal": is_normal,
                 "time": datetime.now().strftime("%H:%M:%S"),
+                **desc,
             }
             self.latest = result
             if not is_normal:
-                self._log(f"⚠️ [AI 警報] 偵測到異常: {pred} ({conf * 100:.1f}%)")
+                self._log(f"⚠️ [AI 警報] 偵測到異常: {desc['name'] or pred}"
+                          f"（{desc['code']}，{conf * 100:.1f}%）")
             self._on_result(result)

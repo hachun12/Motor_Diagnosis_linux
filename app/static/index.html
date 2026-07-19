@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>馬達即時診斷系統</title>
-<link rel="stylesheet" href="/static/vendor/uPlot.min.css?v=6">
-<link rel="stylesheet" href="/static/style.css?v=6">
+<link rel="stylesheet" href="/static/vendor/uPlot.min.css?v=7">
+<link rel="stylesheet" href="/static/style.css?v=7">
 </head>
 <body>
 
@@ -68,9 +68,9 @@
         <span id="iso-text">待機</span>
         <span id="iso-rms">RMS: ---</span>
       </div>
-      <div class="status-box">
-        <span class="ai-label">模型結果</span>
-        <span id="ai-result">等待資料...</span>
+      <div class="status-box ai-box">
+        <div><span class="ai-label">模型結果</span> <span id="ai-result">等待資料...</span></div>
+        <div id="ai-detail" class="ai-detail"></div>
       </div>
     </div>
 
@@ -117,9 +117,10 @@
         </select>
         <span class="play-pos" id="play-pos"></span>
       </div>
-      <div class="status-box">
-        <span class="ai-label">模型判斷（本視窗末 2048 點）</span>
-        <span id="play-ai" style="font-weight:bold;">—</span>
+      <div class="status-box ai-box">
+        <div><span class="ai-label">模型判斷（本視窗末 2048 點）</span>
+             <span id="play-ai" style="font-weight:bold;">—</span></div>
+        <div id="play-ai-detail" class="ai-detail"></div>
       </div>
       <h3 style="margin-top:4px;">⚡ 電流</h3>
       <div class="chart-wrap" id="chart-play-cur"></div>
@@ -173,7 +174,7 @@
   </form>
 </dialog>
 
-<script src="/static/vendor/uPlot.iife.min.js?v=6"></script>
-<script src="/static/app.js?v=6"></script>
+<script src="/static/vendor/uPlot.iife.min.js?v=7"></script>
+<script src="/static/app.js?v=7"></script>
 </body>
 </html>

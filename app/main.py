@@ -385,7 +385,8 @@ def recording_data(name: str, start: float = 0.0, window: float = 2.0,
         try:
             pred, conf = inference.model.predict(win, cfg.channel_keys)
             ai = {"class": pred, "confidence": round(conf, 4),
-                  "normal": pred in cfg.normal_classes}
+                  "normal": pred in cfg.normal_classes,
+                  **cfg.describe_class(pred)}
         except Exception as e:
             logbuf.log(f"❌ 回放推論失敗: {e}")
     else:

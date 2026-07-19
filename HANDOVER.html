@@ -247,9 +247,26 @@ session 有效 12 小時，逾期需重新登入。</div>
   </tr>
 </table>
 
-<h3>故障類別代碼</h3>
-<p class="muted">模型輸出 12 類：N（正常）、RB、RB2、RBS、RBS1、RBS2、RU、RUB、RUB2、RUBS、RUBS1、RUBS2。
-各代碼的工程定義待模型訓練方提供後補充於此。</p>
+<h3>故障類別對照表</h3>
+<p>模型輸出 12 類，對應訓練實驗的馬達單一與複合故障設置
+（顯示於 UI 的「模型結果」，內部類別 → 實驗代號 → 說明）：</p>
+<table>
+  <tr><th>內部類別</th><th>實驗代號</th><th>故障項目</th><th>轉子斷條數量</th><th>繞組短路數量</th><th>掛載砝碼</th></tr>
+  <tr><td>N</td><td>H</td><td>健康馬達</td><td>0</td><td>0</td><td>0</td></tr>
+  <tr><td>RB</td><td>RB-1</td><td>轉子斷條</td><td>2</td><td>0</td><td>0</td></tr>
+  <tr><td>RB2</td><td>RB-2</td><td>轉子斷條</td><td>4</td><td>0</td><td>0</td></tr>
+  <tr><td>RBS</td><td>RBS-1</td><td>轉子斷條＋定子短路</td><td>2</td><td>1</td><td>0</td></tr>
+  <tr><td>RBS1</td><td>RBS-2</td><td>轉子斷條＋定子短路</td><td>4</td><td>1</td><td>0</td></tr>
+  <tr><td>RBS2</td><td>RBS-3</td><td>轉子斷條＋定子短路</td><td>4</td><td>2</td><td>0</td></tr>
+  <tr><td>RU</td><td>RU</td><td>轉子不平衡</td><td>0</td><td>0</td><td>1</td></tr>
+  <tr><td>RUB</td><td>RUB-1</td><td>轉子斷條＋轉子不平衡</td><td>2</td><td>0</td><td>1</td></tr>
+  <tr><td>RUB2</td><td>RUB-2</td><td>轉子斷條＋轉子不平衡</td><td>4</td><td>0</td><td>1</td></tr>
+  <tr><td>RUBS</td><td>RUBS-1</td><td>轉子斷條＋轉子不平衡＋定子短路</td><td>2</td><td>1</td><td>1</td></tr>
+  <tr><td>RUBS1</td><td>RUBS-2</td><td>轉子斷條＋轉子不平衡＋定子短路</td><td>4</td><td>1</td><td>1</td></tr>
+  <tr><td>RUBS2</td><td>RUBS-3</td><td>轉子斷條＋轉子不平衡＋定子短路</td><td>4</td><td>2</td><td>1</td></tr>
+</table>
+<p class="muted">對照表維護於 <code>config.yaml</code> 的 <code>model.class_info</code>，
+修改後重啟服務即生效（UI 與本表請同步更新）。</p>
 
 <hr>
 <p class="muted">文件由專案開發過程整理產出，指令均經實機驗證（x86_64 Ubuntu 22.04 建置

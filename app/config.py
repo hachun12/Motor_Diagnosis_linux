@@ -47,6 +47,7 @@ class Config:
         self.model_interval = float(m.get("interval_seconds", 1.0))
         self.model_classes = list(m.get("classes", []))
         self.normal_classes = set(m.get("normal_classes", ["N"]))
+        self.class_info = m.get("class_info", {}) or {}
 
         iso = raw.get("iso10816", {})
         self.iso_zones = (float(iso.get("zone_a", 0.28)),
@@ -66,6 +67,19 @@ class Config:
         srv = raw.get("server", {})
         self.host = os.environ.get("HOST", srv.get("host", "0.0.0.0"))
         self.port = int(os.environ.get("PORT", srv.get("port", 8000)))
+
+    def describe_class(self, pred: str) -> dict:
+        """模型類別 → 顯示用說明（代號、名稱、故障程度）。未定義時回傳空欄位。"""
+        info = self.class_info.get(pred)
+        if not info:
+            return {"code": pred, "name": "", "detail": ""}
+        if pred in self.normal_classes:
+            detail = "無故障"
+        else:
+            detail = (f"轉子斷條 {info.get('broken_bars', '?')} 支｜"
+                      f"繞組短路 {info.get('shorted', '?')} 處｜"
+                      f"掛載砝碼 {info.get('weight', '?')}")
+        return {"code": info.get("code", pred), "name": info.get("name", ""), "detail": detail}
 
 
 def load_config(path: str = None) -> Config:
